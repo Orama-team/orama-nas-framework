@@ -63,6 +63,9 @@ orama-nas-codebase/
 ├── experiments/              # Experiment runners & results
 │   ├── run_method_analysis.py          # Single-method multi-context evaluation
 │   ├── run_multi_method_comparison.py  # Head-to-head method comparison
+│   ├── run_all_methods.py              # Reproducible all-method experiment suite
+│   ├── sensitivity_analysis.py         # Reproducible MOSHO sensitivity sweeps
+│   ├── plot_performance_comparison.py  # Rebuilds the four performance figures
 │   ├── tune_mosho_hyperparams.py       # MOSHO hyperparameter tuning
 │   ├── context_runner.py               # Context-aware experiment runner
 │   ├── make_ablation_overview_png.py   # Ablation figure generation
@@ -202,16 +205,39 @@ for ind in pareto_front:
 
 ### Single-Method Evaluation
 
-Run a method across all 18 dataset × device contexts with multiple seeds:
+Run a method across all 18 dataset × device contexts with the evaluation
+protocol used for the reported results:
 
 ```bash
 python experiments/run_method_analysis.py \
     --method mosho_enhanced \
     --csv nas_benchmarks/datasets/nas_hw_search_space_bench.csv \
-    --runs 20 \
+    --runs 30 \
     --budget 5000 \
     --pop-size 50
 ```
+
+### Reproducing all results
+
+The root `Makefile` is the single reproducibility entry point. It runs the
+registered methods, reruns the MOSHO sensitivity sweeps, and rebuilds every
+figure in `experiments/results/Performance_Comparison/`:
+
+```bash
+make reproduce
+```
+
+The evaluation protocol uses **30 independent runs per method and context**.
+The random seed for run `n` is `42 + (n - 1) * 7`, giving the sequence
+`42, 49, 56, ...`. Evaluation budgets are
+`B ∈ {1,000, 2,000, 5,000, 7,000, 10,000, 15,000}`. All methods use identical
+contexts, run counts, seed schedule, and budget when being compared.
+
+Before evaluation, each method's hyperparameters are tuned with **Optuna**.
+The selected configuration is then fixed for the independent evaluation runs;
+evaluation runs do not retune parameters or share state. The enhanced NSGA-II
+implementation is named `nsga2-kumar` in all new experiment outputs and
+commands.
 
 ### Multi-Method Comparison
 
@@ -219,9 +245,9 @@ Compare multiple methods under identical experimental conditions:
 
 ```bash
 python experiments/run_multi_method_comparison.py \
-    --methods random skyline mowso \
+    --methods random skyline mowso nsga2-kumar \
     --csv nas_benchmarks/datasets/nas_hw_search_space_bench.csv \
-    --runs 20 \
+    --runs 30 \
     --budget 5000
 ```
 
@@ -233,7 +259,7 @@ Run ablation variants that disable individual MOSHO units (U01–U11):
 python experiments/run_method_analysis.py \
     --method abl_u01 \
     --csv nas_benchmarks/datasets/nas_hw_search_space_bench.csv \
-    --runs 20
+    --runs 30
 ```
 
 Available ablation identifiers: `abl_u01` through `abl_u11`, `g_search`, `g_adapt`, `g_archive`, `g_noadv`, `g_nobase`, `g_core`.
@@ -270,6 +296,7 @@ experiments/results/
 │   ├── mosho/                    #   └── metrics CSVs, Pareto front CSVs, plots
 │   ├── mosho_enhanced/
 │   ├── nsga2/
+│   ├── nsga2-kumar/
 │   ├── pso/
 │   ├── mowso/
 │   ├── random/

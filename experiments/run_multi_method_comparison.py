@@ -7,15 +7,31 @@ from collections import defaultdict
 from pathlib import Path
 from statistics import mean
 from typing import Any
+import pandas as pd
 
 # Ensure imports work when running: python experiments/run_multi_method_comparison.py
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from experiments.run_method_analysis import DEFAULT_DATASETS, DEFAULT_DEVICES, _resolve_path, _write_csv, run_analysis
+from experiments.run_method_analysis import (
+    DEFAULT_DATASETS,
+    DEFAULT_DEVICES,
+    _resolve_path,
+    _write_csv,
+    run_analysis,
+)
 
-ALLOWED_METHODS = ("random", "bruteforce", "skyline", "mowso")
+ALLOWED_METHODS = (
+    "random",
+    "bruteforce",
+    "skyline",
+    "mowso",
+    "mosho",
+    "mosho_enhanced",
+    "nsga2",
+    "nsga2-kumar",
+)
 
 
 def _parse_float(raw: str) -> float:
@@ -39,6 +55,7 @@ def _load_per_run_metrics(csv_path: Path) -> list[dict[str, Any]]:
                     "best_latency": _parse_float(row["best_latency"]),
                     "hv": _parse_float(row["hv"]),
                     "igd_plus": _parse_float(row["igd_plus"]),
+                    "spacing": _parse_float(row["spacing"]),
                     "c_metric": _parse_float(row["c_metric"]),
                     "runtime_sec": _parse_float(row["runtime_sec"]),
                 }
@@ -82,8 +99,10 @@ def compare_many_methods(
             pop_size=pop_size,
             budget=budget,
             seed=seed,
+            seed_step=0,
             datasets=datasets,
             devices=devices,
+            reference_fronts_csv=None,
             results_root=results_root,
         )
 
@@ -91,7 +110,7 @@ def compare_many_methods(
     by_context_method: dict[int, dict[str, list[dict[str, Any]]]] = defaultdict(lambda: defaultdict(list))
 
     for method in unique_methods:
-        per_run_csv = results_root / method / f"{method}_metrics_by_run.csv"
+        per_run_csv = results_root / "All_Methods" / method / f"{method}_metrics_by_run.csv"
         if not per_run_csv.exists():
             raise FileNotFoundError(f"Missing per-run metrics file: {per_run_csv}")
 
@@ -178,6 +197,7 @@ def compare_many_methods(
                 _fmt(mean(r["best_latency"] for r in rows)),
                 _fmt(mean(r["hv"] for r in rows)),
                 _fmt(mean(r["igd_plus"] for r in rows)),
+                _fmt(mean(r["spacing"] for r in rows)),
                 _fmt(mean(r["runtime_sec"] for r in rows)),
                 str(win_counts[method]),
                 str(rank_points[method]),
@@ -185,7 +205,7 @@ def compare_many_methods(
         )
 
     # Sort by rank points desc then wins desc.
-    global_rows.sort(key=lambda r: (-int(r[7]), -int(r[6]), r[0]))
+    global_rows.sort(key=lambda r: (-int(r[8]), -int(r[7]), r[0]))
 
     out_dir = results_root / "comparisons"
     methods_label = "_vs_".join(unique_methods)
@@ -204,14 +224,52 @@ def compare_many_methods(
             "method",
             "best_accuracy_mean",
             "best_latency_mean",
-            "hv_mean",
+            "nhv_mean",
             "igd_plus_mean",
-            "runtime_mean_sec",
+            "spacing_mean",
+            "exec_time_mean_sec",
             "context_wins",
             "rank_points",
         ],
         global_rows,
     )
+
+    # Keep a machine-readable workbook alongside the CSV summaries.  The
+    # per-run sheet preserves the values used for aggregation; the other
+    # sheets are directly suitable for tables/plots in a report.
+    workbook_path = out_dir / f"{methods_label}_metrics.xlsx"
+    per_run_rows = [
+        {"method": method, **row}
+        for method in unique_methods
+        for row in rows_by_method[method]
+    ]
+    summary_frame = pd.DataFrame(
+        global_rows,
+        columns=[
+            "method", "best_accuracy_mean", "best_latency_mean", "nhv_mean",
+            "igd_plus_mean", "spacing_mean", "exec_time_mean_sec",
+            "context_wins", "rank_points",
+        ],
+    )
+    per_run_frame = pd.DataFrame(per_run_rows).rename(
+        columns={"hv": "nhv", "runtime_sec": "exec_time_sec"}
+    )
+    context_frame = pd.DataFrame(
+        context_rows,
+        columns=["context_id", "device", "dataset", "ranking_best_to_worst", "winner"],
+    )
+    try:
+        with pd.ExcelWriter(workbook_path, engine="openpyxl") as writer:
+            summary_frame.to_excel(writer, sheet_name="summary", index=False)
+            per_run_frame[
+                ["method", "run_id", "context_id", "device", "dataset",
+                 "nhv", "igd_plus", "spacing", "exec_time_sec"]
+            ].to_excel(writer, sheet_name="per_run", index=False)
+            context_frame.to_excel(writer, sheet_name="contexts", index=False)
+    except ImportError as exc:
+        raise RuntimeError(
+            "Excel export requires openpyxl. Install dependencies from requirements.txt."
+        ) from exc
 
     print("Multi-method comparison completed successfully.")
     print(f"Methods: {', '.join(unique_methods)}")
@@ -219,6 +277,7 @@ def compare_many_methods(
     print(f"Contexts compared: {len(context_rows)}")
     print(f"Context ranking CSV: {contexts_csv}")
     print(f"Global summary CSV: {summary_csv}")
+    print(f"Excel metrics workbook: {workbook_path}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -236,7 +295,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="nas_benchmarks/datasets/nas_hw_search_space_bench.csv",
         help="Input benchmark CSV.",
     )
-    parser.add_argument("--runs", type=int, default=20, help="Number of repetitions.")
+    parser.add_argument("--runs", type=int, default=30, help="Number of independent repetitions.")
     parser.add_argument("--pop-size", type=int, default=20, help="Population size for population-based methods.")
     parser.add_argument("--budget", type=int, default=60, help="Evaluation budget for budgeted methods.")
     parser.add_argument("--seed", type=int, default=42, help="Base random seed.")

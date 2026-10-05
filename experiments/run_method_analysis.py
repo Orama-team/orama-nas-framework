@@ -22,7 +22,7 @@ from nas_framework.mutation import SinglePointMutation, GaussianMutation, ABCNei
 from nas_framework.population import Individual, Population, PSOPopulation, ABCPopulation
 from nas_framework.replacement import ElitistReplacement, CrowdingReplacement, RankBasedReplacement
 from nas_framework.search_space import CSVSearchSpace
-from nas_framework.search_strategy import ABCFireflyStrategy,BruteForceParetoSearch, RandomSearch, SkylineSearch, MOWSOSearch, MOSHOSearch, MOSHOEnhancedSearch, PSOSearchStrategy, ABCSearchStrategy, FireflySearchStrategy, HybridMBOStrategy,  APSOESearch, NSGA2SearchStrategy
+from nas_framework.search_strategy import ABCFireflyStrategy,BruteForceParetoSearch, RandomSearch, SkylineSearch, MOWSOSearch, MOSHOSearch, MOSHOEnhancedSearch, PSOSearchStrategy, ABCSearchStrategy, FireflySearchStrategy, HybridMBOStrategy,  APSOESearch, NSGA2SearchStrategy, NSGA2EnhancedSearchStrategy
 from nas_framework.selection import TournamentSelection, RouletteWheelSelection
 from utilities.metrics import c_metric, igd_plus, non_dominated, normalized_hypervolume_to_reference_2d
 from utilities.plotting import (
@@ -35,6 +35,22 @@ from utilities.plotting import (
 DEFAULT_DATASETS = ("cifar10", "cifar100", "ImageNet16-120")
 DEFAULT_DEVICES = ("edgegpu", "edgetpu", "eyeriss", "fpga", "pixel3", "raspi4")
 OBJECTIVE_DIRECTIONS = (1, -1)
+REPRODUCTION_METHODS = (
+    "random",
+    "bruteforce",
+    "skyline",
+    "mowso",
+    "mosho",
+    "mosho_enhanced",
+    "abc_firefly",
+    "pso",
+    "abc",
+    "firefly",
+    "hybrid_mbo",
+    "apso_e",
+    "nsga2",
+    "nsga2-kumar",
+)
 
 MOSHO_ABLATION_VARIANTS: dict[str, dict[str, Any]] = {
     "mosho_enhanced": {"method": "mosho_enhanced", "tex_label": "MOSHO", "disabled_units": set(), "units_removed": ""},
@@ -235,6 +251,17 @@ def _build_strategy(
             replacement=RankBasedReplacement(w_perf=0.6),
             evaluator=evaluator,
             budget=budget,
+        )
+    if method == "nsga2-kumar":
+        return NSGA2EnhancedSearchStrategy(
+            population=Population(search_space, evaluator, size=pop_size),
+            selection=TournamentSelection(k=2),
+            crossover=UniformCrossover(),
+            mutation=SinglePointMutation(search_space),
+            replacement=CrowdingReplacement(),
+            evaluator=evaluator,
+            budget=budget,
+            archive_size=pop_size,
         )
  
     raise ValueError(f"Unknown method: {method}")
@@ -796,7 +823,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--method",
-        choices=["random", "bruteforce", "skyline", "mowso", "mosho", "mosho_enhanced", "abc_firefly", "pso", "abc", "firefly", "hybrid_mbo", "apso_e", "nsga2"],
+        choices=list(REPRODUCTION_METHODS),
         default="random",
         help="Search strategy method to analyze.",
     )
@@ -819,7 +846,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="nas_benchmarks/datasets/nas_hw_search_space_bench.csv",
         help="Input benchmark CSV.",
     )
-    parser.add_argument("--runs", type=int, default=20, help="Number of repetitions.")
+    parser.add_argument("--runs", type=int, default=30, help="Number of independent repetitions.")
     parser.add_argument("--pop-size", type=int, default=20, help="Population size (random method).")
     parser.add_argument("--budget", type=int, default=60, help="Evaluation budget (random method).")
     parser.add_argument("--seed", type=int, default=42, help="Base random seed.")

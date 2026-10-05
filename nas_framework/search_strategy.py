@@ -16,6 +16,7 @@ from nas_framework.search_space import SearchSpace
 from nas_framework.mo_utils import pareto_front as compute_pareto_front
 from nas_framework.mo_utils import exact_pareto_front_2d
 from nas_framework.mo_utils import dominates
+from nas_framework.mo_utils import assign_rank_and_crowding
 
 
 class SearchStrategy(ABC):
@@ -2879,6 +2880,78 @@ class NSGA2SearchStrategy(SearchStrategy):
 
         return self.population
 
+
+class NSGA2EnhancedSearchStrategy(NSGA2SearchStrategy):
+    """Budget-safe NSGA-II with an external non-dominated archive.
+
+    This is the NSGA-II variant used for the MO-NAS comparison.  It keeps the
+    canonical binary tournament, variation, fast non-dominated sorting and
+    crowding-distance survivor selection, while also retaining non-dominated
+    solutions found in previous generations.
+    """
+
+    def __init__(self, *args, archive_size: int | None = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.budget = int(kwargs.get("budget", 500))
+        self.archive_size = archive_size or self.population.size
+        self.archive: list[Individual] = []
+
+    @staticmethod
+    def _clone(individual: Individual) -> Individual:
+        return Individual(
+            individual.genotype[:],
+            individual.fitness,
+            individual.metadata.copy(),
+        )
+
+    def _update_archive(self, candidates: list[Individual]) -> None:
+        by_genotype: dict[tuple[int, ...], Individual] = {
+            tuple(ind.genotype): ind for ind in self.archive
+        }
+        by_genotype.update({tuple(ind.genotype): ind for ind in candidates})
+        archive = compute_pareto_front(
+            list(by_genotype.values()),
+            self.evaluator.objective_directions,
+        )
+        if len(archive) > self.archive_size:
+            assign_rank_and_crowding(archive, self.evaluator.objective_directions)
+            archive.sort(key=lambda ind: ind.crowding_distance, reverse=True)
+            archive = archive[: self.archive_size]
+        self.archive = [self._clone(ind) for ind in archive]
+
+    def run(self) -> Population:
+        """Run NSGA-II without evaluating the initial population twice."""
+        self.population.size = min(self.population.size, max(1, self.budget))
+        self.population.initialize()
+        self.evaluations = len(self.population)
+        self.generations = 0
+        self.archive = []
+        self._update_archive(self.population.individuals)
+        self._record_history()
+
+        while not self.termination.should_stop(self.evaluations, self.generations):
+            remaining = self.budget - self.evaluations
+            offspring_count = min(self.population.size, remaining)
+            if offspring_count <= 0:
+                break
+
+            parents = self.selection.select(
+                self.population.individuals,
+                self.population.size,
+                self.evaluator.objective_directions,
+            )
+            offspring = self.variation.generate(parents, offspring_count)
+            self._evaluate_offspring(offspring)
+            combined = self.population.individuals + offspring
+            self._assign_rank_and_crowding(combined)
+            self.population.individuals = self._select_population(combined)
+            self._update_archive(self.population.individuals + offspring)
+            self.generations += 1
+            self._record_history()
+
+        return [self._clone(ind) for ind in self.archive] if self.archive else self.population
+
+
 class ABCFireflyStrategy:
     """ABC-Firefly hybrid for multi-objective NAS.
 
@@ -3232,8 +3305,5 @@ class ABCFireflyStrategy:
 
         return [Individual(a.genotype[:], a.fitness, a.metadata.copy())
                 for a in self.archive]
-
-
-
 
 
