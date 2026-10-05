@@ -1,6 +1,24 @@
+ORAMA-NAS Framework
+
+This repository contains the ORAMA-NAS Framework, an open-source research
+framework for hardware-aware Neural Architecture Search (NAS) and
+population-based optimization. It includes reusable optimization components,
+implementations of multiple state-of-the-art algorithms, benchmark interfaces,
+experimental pipelines, and reproducibility tools.
+
+MOSHO (Multi-Objective Shark Hunting Optimizer) is an original optimization
+method developed by the ORAMA Team. The ORAMA Team is recognized as the
+original author and owner of the intellectual contribution embodied in the
+MOSHO method. This repository provides the official reference implementation
+of MOSHO as part of the ORAMA-NAS Framework.
+
+The software implementation is released under the MIT License below.
+
+-------------------------------------------------------------------------------
+
 MIT License
 
-Copyright (c) 2025 Orama NAS Authors
+Copyright (c) 2026 ORAMA Team
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
