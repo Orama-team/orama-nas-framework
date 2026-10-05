@@ -11,8 +11,7 @@
   <a href="#search-strategies">Strategies</a> •
   <a href="#getting-started">Getting Started</a> •
   <a href="#experiments">Experiments</a> •
-  <a href="#reproducibility">Reproducibility</a> •
-  <a href="#citation">Citation</a>
+  <a href="#reproducibility">Reproducibility</a>
 </p>
 
 ---
@@ -372,17 +371,3 @@ matplotlib>=3.7
 This project is licensed under the [MIT License](LICENSE).
 
 ---
-
-## Citation
-
-If you use this codebase in your research, please cite:
-
-```bibtex
-@article{orama2025mosho,
-  title   = {MOSHO: Multi-Objective Shark Hunting Optimization for 
-             Hardware-Aware Neural Architecture Search},
-  author  = {<Authors>},
-  journal = {<Journal/Conference>},
-  year    = {2025}
-}
-```
