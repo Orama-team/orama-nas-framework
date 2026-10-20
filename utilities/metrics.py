@@ -81,42 +81,32 @@ def normalized_hypervolume_2d(
     front: Iterable[Point2D],
     directions: tuple[int, int],
     reference_point: Point2D,
-    ideal_point: Point2D,
+    normalization_front: Iterable[Point2D],
 ) -> float:
     """
     Calculate normalized 2D hypervolume.
-    
-    Divides raw hypervolume by the maximum possible hypervolume
-    (area from ideal point to reference point).
+
+    Divides the front's hypervolume by the hypervolume of a reference front,
+    using the same reference point for both.
     
     Args:
         front: Pareto front points
         directions: Optimization directions (1 for maximize, -1 for minimize)
         reference_point: Reference point for HV calculation
-        ideal_point: Ideal/utopian point (best possible values for each objective)
+        normalization_front: Reference Pareto front used as the normalization baseline
     
     Returns:
-        Normalized HV in [0, 1]
+        Hypervolume ratio relative to the normalization front
     """
     raw_hv = hypervolume_2d(front, directions, reference_point)
-    
-    # Calculate maximum possible HV (area from ideal to reference point)
-    if directions[0] == 1:  # maximizing first objective
-        max_width = reference_point[0] - ideal_point[0]
-    else:  # minimizing first objective
-        max_width = ideal_point[0] - reference_point[0]
-    
-    if directions[1] == 1:  # maximizing second objective
-        max_height = reference_point[1] - ideal_point[1]
-    else:  # minimizing second objective
-        max_height = ideal_point[1] - reference_point[1]
-    
-    max_hv = max_width * max_height
-    
-    if max_hv <= 0:
+
+    normalization_hv = hypervolume_2d(
+        normalization_front, directions, reference_point
+    )
+    if normalization_hv <= 0:
         return 0.0
-    
-    return raw_hv / max_hv
+
+    return raw_hv / normalization_hv
 
 
 def igd_plus(
